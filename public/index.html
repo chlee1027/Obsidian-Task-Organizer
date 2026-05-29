@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AOTO // AI-Powered Obsidian Task Organizer</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Lucide Icons (CDN) for premium visual icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div class="app-background">
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+  </div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo-area">
+        <div class="logo-text">
+          <h1>Obsidian Task Organizer</h1>
+        </div>
+      </div>
+
+      <div class="status-widgets">
+        <div id="clock-widget" class="widget">
+          <i data-lucide="clock"></i>
+          <span id="live-time">12:00:00 PM</span>
+        </div>
+        <div id="status-api" class="status-pill status-error" onclick="openConfigModal()">
+          <span class="status-indicator"></span>
+          <i data-lucide="key"></i>
+          <span class="status-text">API Key 미설정</span>
+        </div>
+        <div id="status-vault" class="status-pill status-error" onclick="openConfigModal()">
+          <span class="status-indicator"></span>
+          <i data-lucide="folder"></i>
+          <span class="status-text">Vault 미설정</span>
+        </div>
+        <button class="icon-btn config-trigger" onclick="openConfigModal()" title="설정 열기">
+          <i data-lucide="settings"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="workspace">
+      <!-- Left Panel: Input & Controls -->
+      <section class="panel input-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <i data-lucide="edit-3"></i>
+            <h2>일정 무작위 입력</h2>
+          </div>
+          <button class="text-btn" onclick="clearInput()" title="입력창 비우기">
+            <i data-lucide="trash-2"></i> 비우기
+          </button>
+        </div>
+
+        <div class="control-group">
+          <label class="group-label">대상 날짜 선택</label>
+          <div class="date-selector">
+            <button id="btn-today" class="date-tab" onclick="setDateTarget('today')">오늘</button>
+            <button id="btn-tomorrow" class="date-tab active" onclick="setDateTarget('tomorrow')">내일</button>
+            <div class="custom-date-wrapper">
+              <input type="date" id="target-date" class="date-input" onchange="setDateTarget('custom')">
+            </div>
+          </div>
+          <!-- Existing note indicator banner -->
+          <div id="existing-note-banner" class="existing-note-alert hidden">
+            <div class="alert-left">
+              <i data-lucide="file-check"></i>
+              <span class="alert-msg">보관소에 기존 노트가 이미 존재합니다.</span>
+            </div>
+            <button class="load-badge-btn" onclick="loadExistingNote()" title="옵시디언 기존 노트 불러오기">
+              불러와서 합치기
+            </button>
+          </div>
+        </div>
+
+        <!-- Dedicated direct-access tool buttons for schedule templates -->
+        <div class="control-group" style="padding-top: 0; margin-top: 8px;">
+          <label class="group-label">스케줄 템플릿 관리</label>
+          <div class="schedule-tools-row">
+            <button class="tool-btn" onclick="openModalToTab('weekly')" type="button">
+              <i data-lucide="calendar"></i> 고정 일정 관리
+            </button>
+            <button class="tool-btn" onclick="openModalToTab('flexible')" type="button">
+              <i data-lucide="calendar-range"></i> 이번주 유동 일정
+            </button>
+          </div>
+        </div>
+
+        <div class="input-wrapper">
+          <textarea id="raw-memo" placeholder="여기에 내일 할 일들을 생각나는 대로 막 적어보세요!
+예시:
+- 오전 9시 반에 대행사랑 줌 미팅 일정 잡힘
+- 오후 2시 코딩 테스트 공부하고, 저녁엔 헬스장 가기
+- 아 맞다 마트 들러서 우유랑 계란 사야함
+- 자기 전에 영어 단어 30개 외우고 책도 꼭 15페이지 읽고 자기" required></textarea>
+          <div class="textarea-footer">
+            <span class="char-count"><span id="char-num">0</span> 자 작성됨</span>
+            <button class="hint-btn" onclick="loadSample()" title="샘플 텍스트 로드">
+              <i data-lucide="help-circle"></i> 작성 예시 넣기
+            </button>
+          </div>
+        </div>
+
+        <button id="btn-generate" class="primary-btn glow-button" onclick="generateTasks()">
+          <span class="btn-content">
+            <i data-lucide="sparkles"></i> AI로 하루 일정 정리하기
+          </span>
+          <span class="btn-loader hidden">
+            <span class="spinner"></span> 일정을 체계화하는 중...
+          </span>
+        </button>
+      </section>
+
+      <!-- Right Panel: Output & Preview -->
+      <section class="panel output-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <i data-lucide="file-check"></i>
+            <h2>정리된 옵시디언 데일리 노트</h2>
+          </div>
+          
+          <div class="tab-selectors hidden" id="preview-tabs">
+            <button id="tab-visual" class="tab-btn active" onclick="switchPreviewTab('visual')">
+              <i data-lucide="eye"></i> 시각적 미리보기
+            </button>
+            <button id="tab-raw" class="tab-btn" onclick="switchPreviewTab('raw')">
+              <i data-lucide="code"></i> 마크다운 코드
+            </button>
+          </div>
+        </div>
+
+        <div class="output-content-container">
+          <!-- Empty State -->
+          <div id="output-state-empty" class="state-view">
+            <div class="state-icon">
+              <i data-lucide="compass"></i>
+            </div>
+            <h3>준비 완료</h3>
+            <p>왼쪽 창에 일정을 적고 'AI로 하루 일정 정리하기' 버튼을 누르면 이 자리에 체계적인 데일리 노트가 생성됩니다.</p>
+          </div>
+
+          <!-- Loading State -->
+          <div id="output-state-loading" class="state-view hidden">
+            <div class="loading-animation">
+              <div class="circle-loader">
+                <div></div><div></div>
+              </div>
+            </div>
+            <h3>Gemini AI 분석 중</h3>
+            <p>무작위 메모를 분류하고, 시간 순서대로 정렬하여 최적의 데일리 루틴을 조직하고 있습니다.</p>
+          </div>
+
+          <!-- Result Area -->
+          <div id="output-state-result" class="result-area hidden">
+            <!-- Visual Rendered Preview -->
+            <div id="preview-visual-box" class="preview-container markdown-body"></div>
+
+            <!-- Raw Markdown Code Textarea -->
+            <div id="preview-raw-box" class="preview-container hidden">
+              <textarea id="markdown-output" placeholder="정리된 마크다운 내용을 직접 자유롭게 수정해보세요."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-footer hidden" id="output-actions">
+          <button class="secondary-btn" onclick="copyToClipboard()">
+            <i data-lucide="copy" id="copy-icon"></i>
+            <span id="copy-text">클립보드 복사</span>
+          </button>
+          <button class="primary-btn glow-green-btn" onclick="saveToObsidian()">
+            <i data-lucide="save"></i>
+            <span>Obsidian 보관소에 저장</span>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Configuration Modal (Popup) -->
+    <div id="config-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">
+            <i data-lucide="sliders"></i>
+            <h3>AOTO 시스템 설정</h3>
+          </div>
+          <button class="close-btn" onclick="closeConfigModal()">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+
+        <!-- Modal Tabs Header -->
+        <div class="modal-tabs">
+          <button class="modal-tab-btn active" onclick="switchModalTab('general')" type="button">
+            <i data-lucide="settings"></i> 기본 설정
+          </button>
+          <button class="modal-tab-btn" onclick="switchModalTab('weekly')" type="button">
+            <i data-lucide="calendar"></i> 고정 일정
+          </button>
+          <button class="modal-tab-btn" onclick="switchModalTab('flexible')" type="button">
+            <i data-lucide="calendar-days"></i> 유동 일정
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Tab 1: General Settings -->
+          <div id="modal-tab-general" class="modal-tab-pane">
+            <p class="modal-desc" style="margin-bottom: 16px;">AI 모델 연결 및 컴퓨터의 Obsidian 보관소 경로를 연동합니다.</p>
+            
+            <div class="form-group">
+              <label for="api-key-input">
+                <span>Gemini API Key</span>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="help-link">API Key 발급받기 <i data-lucide="external-link"></i></a>
+              </label>
+              <div class="input-with-icon">
+                <i data-lucide="key"></i>
+                <input type="password" id="api-key-input" placeholder="AI Studio에서 발급받은 API 키 입력">
+              </div>
+              <span class="field-hint">API 키는 서버 컴퓨터 로컬 `config.json`에만 안전하게 보관됩니다.</span>
+            </div>
+
+            <div class="form-group" style="margin-top: 16px;">
+              <label for="vault-path-input">
+                <span>Obsidian Vault 경로</span>
+              </label>
+              <div class="input-with-icon">
+                <i data-lucide="folder-open"></i>
+                <input type="text" id="vault-path-input" placeholder="예: C:\Users\YourName\Documents\Obsidian\MyVault">
+              </div>
+              <span class="field-hint">윈도우 파일 탐색기에서 옵시디언 보관소 폴더 경로를 복사하여 붙여넣으세요.</span>
+            </div>
+
+            <div class="form-group" style="margin-top: 16px;">
+              <label for="subfolder-input">
+                <span>보관소 내 저장 하위 폴더 (선택)</span>
+              </label>
+              <div class="input-with-icon">
+                <i data-lucide="corner-down-right"></i>
+                <input type="text" id="subfolder-input" placeholder="예: Daily Notes">
+              </div>
+              <span class="field-hint">데일리 노트를 보관하는 보관소 안의 특정 폴더를 기재하세요. (빈칸 시 루트 폴더에 저장)</span>
+            </div>
+
+            <div class="form-group" style="margin-top: 16px;">
+              <label>데일리 노트 템플릿 환경설정</label>
+              <div class="toggle-group">
+                <label class="toggle-option">
+                  <input type="radio" name="template" value="modern-dark" checked>
+                  <span>표준 테마 (체크리스트 + 타임라인 + 콜아웃)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Fixed Weekly Timetable -->
+          <div id="modal-tab-weekly" class="modal-tab-pane hidden">
+            <p class="modal-desc" style="margin-bottom: 16px;">요일별 정기 학교 수업 시간표와 연구실 정기 세미나 일정을 설정합니다.</p>
+            
+            <div class="form-group">
+              <label>📅 주간 고정 일정 설정 (쉼표로 일정 구분)</label>
+              <span class="field-hint" style="margin-bottom: 8px;">각 요일별 고정 일정을 입력하면 해당 요일 노트를 정리할 때 AI가 자동으로 추가해 줍니다.</span>
+              
+              <div class="weekly-schedule-grid">
+                <div class="day-input-box">
+                  <span class="day-label">월요일</span>
+                  <input type="text" id="sched-monday" placeholder="예: 09:00 컴퓨터 구조 수업, 13:00 지도교수 미팅">
+                </div>
+                <div class="day-input-box">
+                  <span class="day-label">화요일</span>
+                  <input type="text" id="sched-tuesday" placeholder="예: 10:00 연구실 출근">
+                </div>
+                <div class="day-input-box">
+                  <span class="day-label">수요일</span>
+                  <input type="text" id="sched-wednesday" placeholder="예: 18:00 연구실 정기 세미나">
+                </div>
+                <div class="day-input-box">
+                  <span class="day-label">목요일</span>
+                  <input type="text" id="sched-thursday" placeholder="예: 14:00 조교 세미나 준비">
+                </div>
+                <div class="day-input-box">
+                  <span class="day-label">금요일</span>
+                  <input type="text" id="sched-friday" placeholder="예: 16:00 주간 연구 피드백 확인">
+                </div>
+                <div class="day-input-box">
+                  <span class="day-label">토요일</span>
+                  <input type="text" id="sched-saturday" placeholder="예: 10:00 주말 스터디 모임">
+                </div>
+                <div class="day-input-box">
+                  <span class="day-label">일요일</span>
+                  <input type="text" id="sched-sunday" placeholder="예: 휴식 및 다음주 일정 점검">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: Flexible/Rotating Shift Schedule -->
+          <div id="modal-tab-flexible" class="modal-tab-pane hidden">
+            <p class="modal-desc" style="margin-bottom: 16px;">매주 유동적으로 바뀌는 회의, 근무, 약속 등의 변동 시간표를 통째로 붙여넣어 관리합니다.</p>
+            
+            <div class="form-group">
+              <label for="flexible-schedule-input">📋 이번 주 유동 일정 (교대근무 및 변동 일정 등)</label>
+              <div class="input-with-icon">
+                <i data-lucide="calendar-range"></i>
+                <input type="text" id="flexible-schedule-input" placeholder="예: 이번주 일정: 월 14-18시, 수 12-16시 (텍스트 통째로 붙여넣기 가능)">
+              </div>
+              <span class="field-hint" style="margin-top: 8px; display: inline-block;">매주 유동적으로 바뀌는 시간표 안내 문자나 카카오톡 텍스트 전체를 복사해서 이 필드에 붙여넣어 두세요. AI가 날짜별 대상 요일을 자동으로 감지하여 관련 일정을 해당 요일의 데일리 노트에 조립해 줍니다.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="text-btn" onclick="closeConfigModal()">취소</button>
+          <button class="primary-btn accent-btn" onclick="saveConfiguration()">
+            <i data-lucide="check-circle"></i> 설정 저장 및 검증
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="app.js"></script>
+</body>
+</html>
