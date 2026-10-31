@@ -2,10 +2,9 @@
   "name": "obsidian-ai-scheduler",
   "version": "2.0.0",
   "private": true,
-  "description": "AI-Powered Daily Note Organizer for Obsidian (static web app)",
+  "description": "AI-Powered Daily Note Organizer for Obsidian (Vercel web app)",
   "scripts": {
-    "dev": "npx --yes serve public -l 3000",
-    "start": "npx --yes serve public -l 3000"
+    "dev": "npx --yes vercel dev"
   },
   "keywords": [
     "obsidian",
@@ -14,5 +13,8 @@
     "scheduler",
     "todo"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
 }

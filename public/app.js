@@ -1,35 +1,25 @@
-// AOTO runs entirely in the browser. There is no backend server:
-// - Settings (including the Gemini API key) live in this browser's localStorage.
-// - Gemini is called directly from the browser with the user's own key.
-// - Notes are written to the Obsidian vault in one of two ways:
+// AOTO front end. The /api functions (Vercel) hold user accounts, each user's settings
+// and Gemini API key; the key never reaches the browser.
+// Notes are written to the Obsidian vault in one of two ways:
 //   1) File System Access API (Chrome/Edge on desktop): the user picks the vault
 //      folder once, and notes are read/written directly in that folder.
 //   2) Obsidian URI (Safari/iPhone, Firefox, etc.): obsidian://new opens the
 //      Obsidian app and creates/overwrites the note there.
 
-const CONFIG_STORAGE_KEY = 'aoto-config';
 const FS_SUPPORTED = typeof window.showDirectoryPicker === 'function';
-
-const DEFAULT_CONFIG = {
-  geminiApiKey: '',
-  vaultName: '',              // Used for obsidian:// URIs
-  saveSubfolder: 'Daily Notes',
-  templatePreference: 'modern-dark',
-  flexibleSchedule: '',
-  weeklySchedule: {
-    monday: '',
-    tuesday: '',
-    wednesday: '',
-    thursday: '',
-    friday: '',
-    saturday: '',
-    sunday: ''
-  }
-};
 
 // Application Global State
 const state = {
-  config: structuredClone(DEFAULT_CONFIG),
+  username: null,
+  authMode: 'login',          // 'login' | 'signup'
+  signupOpen: true,
+  config: {
+    hasApiKey: false,
+    vaultName: '',              // Used for obsidian:// URIs
+    saveSubfolder: 'Daily Notes',
+    weeklySchedule: {},
+    flexibleSchedule: ''
+  },
   vaultHandle: null,          // FileSystemDirectoryHandle (FS mode only)
   vaultPermission: 'none',    // 'none' | 'granted' | 'prompt' | 'denied'
   targetDate: '',
@@ -70,15 +60,151 @@ async function initApp() {
     window.lucide.createIcons();
   }
 
-  // Load configuration from localStorage, and the vault folder handle from IndexedDB
-  loadConfiguration();
+  // Default target date is "Tomorrow"
+  setDateTarget('tomorrow', { skipCheck: true });
+
+  // Show the login screen unless this browser already has a session
+  let session = null;
+  try {
+    session = await apiFetch('/api/session', {}, { allowUnauthenticated: true });
+  } catch (error) {
+    session = null;
+  }
+  state.signupOpen = !session || session.signupOpen !== false;
+  if (session && session.authenticated) {
+    await onLoggedIn(session.username);
+  } else {
+    showLogin(session ? '' : '서버에 연결하지 못했습니다.');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Server API and login
+// ---------------------------------------------------------------------------
+
+// fetch wrapper: JSON in/out, shows the login screen on 401
+async function apiFetch(url, options = {}, { allowUnauthenticated = false } = {}) {
+  const opts = { credentials: 'same-origin', ...options };
+  if (opts.body !== undefined) {
+    opts.method = opts.method || 'POST';
+    opts.headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    opts.body = JSON.stringify(opts.body);
+  }
+  let response;
+  try {
+    response = await fetch(url, opts);
+  } catch (error) {
+    throw new Error('서버에 연결하지 못했습니다.');
+  }
+  const data = await response.json().catch(() => ({}));
+  if (response.status === 401 && !allowUnauthenticated) {
+    resetUserState();
+    showLogin('로그인이 필요합니다.');
+    throw new Error(data.error || '로그인이 필요합니다.');
+  }
+  if (!response.ok && !allowUnauthenticated) {
+    throw new Error(data.error || `요청 실패 (${response.status})`);
+  }
+  return data;
+}
+
+function showLogin(message) {
+  document.getElementById('login-overlay').classList.add('active');
+  document.getElementById('auth-tab-signup').classList.toggle('hidden', !state.signupOpen);
+  setAuthMode(state.signupOpen ? state.authMode : 'login');
+  document.getElementById('login-error').textContent = message || '';
+  document.getElementById('login-password').value = '';
+  setTimeout(() => document.getElementById('login-username').focus(), 50);
+}
+
+function setAuthMode(mode) {
+  state.authMode = mode;
+  const signup = mode === 'signup';
+  document.getElementById('auth-tab-login').classList.toggle('active', !signup);
+  document.getElementById('auth-tab-signup').classList.toggle('active', signup);
+  document.getElementById('signup-code-group').classList.toggle('hidden', !signup);
+  document.getElementById('login-title').textContent = signup ? 'AOTO 가입' : 'AOTO 로그인';
+  document.getElementById('auth-submit-text').textContent = signup ? '가입하고 시작하기' : '로그인';
+  document.getElementById('login-password').setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+  document.getElementById('login-error').textContent = '';
+}
+
+async function submitLogin(event) {
+  if (event) event.preventDefault();
+  const username = document.getElementById('login-username').value.trim().toLowerCase();
+  const password = document.getElementById('login-password').value;
+  const code = document.getElementById('signup-code').value.trim();
+  const errorEl = document.getElementById('login-error');
+  if (!username || !password) {
+    errorEl.textContent = '아이디와 비밀번호를 입력해주세요.';
+    return;
+  }
+  const signup = state.authMode === 'signup';
+  if (signup && !code) {
+    errorEl.textContent = '가입 코드를 입력해주세요.';
+    return;
+  }
+  try {
+    const data = await apiFetch(signup ? '/api/signup' : '/api/login', {
+      body: signup ? { username, password, code } : { username, password }
+    }, { allowUnauthenticated: true });
+    if (!data.success) {
+      errorEl.textContent = data.error || '실패했습니다.';
+      return;
+    }
+    document.getElementById('login-overlay').classList.remove('active');
+    document.getElementById('signup-code').value = '';
+    await onLoggedIn(data.username);
+    if (signup) {
+      showToast('가입되었습니다. 설정에서 Gemini API 키를 먼저 등록해주세요.', 'success');
+      openConfigModal();
+    }
+  } catch (error) {
+    errorEl.textContent = error.message;
+  }
+}
+
+async function logout() {
+  try {
+    await apiFetch('/api/logout', { body: {} }, { allowUnauthenticated: true });
+  } finally {
+    resetUserState();
+    showLogin('로그아웃되었습니다.');
+  }
+}
+
+// Clear everything that belongs to the previous user
+function resetUserState() {
+  state.username = null;
+  state.vaultHandle = null;
+  state.vaultPermission = 'none';
+  state.existingMarkdown = '';
+  state.generatedMarkdown = '';
+  state.config = { hasApiKey: false, vaultName: '', saveSubfolder: 'Daily Notes', weeklySchedule: {}, flexibleSchedule: '' };
+  document.getElementById('current-user').textContent = '';
+  document.getElementById('raw-memo').value = '';
+  document.getElementById('char-num').textContent = '0';
+  document.getElementById('markdown-output').value = '';
+  document.getElementById('preview-visual-box').innerHTML = '';
+  document.getElementById('output-state-result').classList.add('hidden');
+  document.getElementById('preview-tabs').classList.add('hidden');
+  document.getElementById('output-actions').classList.add('hidden');
+  document.getElementById('output-state-empty').classList.remove('hidden');
+  document.getElementById('existing-note-banner').classList.add('hidden');
+  updateStatusPills();
+}
+
+async function onLoggedIn(username) {
+  state.username = username;
+  document.getElementById('current-user').textContent = username || '';
+  // The vault folder is remembered per user in this browser
   if (FS_SUPPORTED) {
+    state.vaultHandle = null;
+    state.vaultPermission = 'none';
     await restoreVaultHandle();
   }
-  updateStatusPills();
-
-  // Default target date is "Tomorrow" (also checks for an existing note)
-  setDateTarget('tomorrow');
+  await loadConfiguration();
+  await checkExistingNote();
 }
 
 // Clock Widget running
@@ -101,7 +227,7 @@ function startClock() {
 }
 
 // Set Date Target
-function setDateTarget(type) {
+function setDateTarget(type, { skipCheck = false } = {}) {
   const today = new Date();
   const dateInput = document.getElementById('target-date');
   const btnToday = document.getElementById('btn-today');
@@ -130,7 +256,7 @@ function setDateTarget(type) {
   }
 
   // Check if daily note exists in Vault for the selected date
-  checkExistingNote();
+  if (!skipCheck) checkExistingNote();
 }
 
 // Helper to format date YYYY-MM-DD
@@ -146,31 +272,28 @@ function isValidDateString(date) {
 }
 
 // ---------------------------------------------------------------------------
-// Configuration (localStorage)
+// Configuration (stored on the server, shared by every logged-in device)
 // ---------------------------------------------------------------------------
 
-function readStoredConfig() {
+// Load configuration into state and the settings modal
+async function loadConfiguration() {
   try {
-    const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
-    if (!raw) return structuredClone(DEFAULT_CONFIG);
-    const parsed = JSON.parse(raw);
-    return {
-      ...structuredClone(DEFAULT_CONFIG),
-      ...parsed,
-      weeklySchedule: { ...DEFAULT_CONFIG.weeklySchedule, ...(parsed.weeklySchedule || {}) }
-    };
+    const config = await apiFetch('/api/config');
+    applyConfig(config);
   } catch (error) {
-    return structuredClone(DEFAULT_CONFIG);
+    showToast('설정 로드 실패: ' + error.message, 'error');
   }
 }
 
-// Load configuration into state and the settings modal
-function loadConfiguration() {
-  const config = readStoredConfig();
+function applyConfig(config) {
   state.config = config;
 
-  // Populate modal inputs
-  document.getElementById('api-key-input').value = config.geminiApiKey || '';
+  // The saved key is never sent back; the field stays empty unless the user types a new one
+  const keyInput = document.getElementById('api-key-input');
+  keyInput.value = '';
+  keyInput.placeholder = config.hasApiKey
+    ? '저장된 키 사용 중 (바꿀 때만 새 키 입력)'
+    : 'AI Studio에서 발급받은 API 키 입력';
   document.getElementById('vault-name-input').value = config.vaultName || '';
   document.getElementById('subfolder-input').value = config.saveSubfolder || '';
 
@@ -186,12 +309,14 @@ function loadConfiguration() {
 
   // Populate flexible schedule
   document.getElementById('flexible-schedule-input').value = config.flexibleSchedule || '';
+
+  updateStatusPills();
 }
 
 // Update the header status pills from current state
 function updateStatusPills() {
   const apiPill = document.getElementById('status-api');
-  if (state.config.geminiApiKey) {
+  if (state.config.hasApiKey) {
     apiPill.className = 'status-pill status-success';
     apiPill.querySelector('.status-text').textContent = 'API Key 연결됨';
   } else {
@@ -246,21 +371,19 @@ async function saveConfiguration() {
 
   const flexibleSchedule = document.getElementById('flexible-schedule-input').value.trim();
 
-  const updatedConfig = {
-    geminiApiKey: apiKey,
-    vaultName: vaultName,
-    saveSubfolder: subfolder,
-    templatePreference: 'modern-dark',
-    weeklySchedule: weeklySchedule,
-    flexibleSchedule: flexibleSchedule
-  };
-
   try {
-    localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(updatedConfig));
-    state.config = updatedConfig;
-    showToast('설정이 이 브라우저에 저장되었습니다.', 'success');
+    const data = await apiFetch('/api/config', {
+      body: {
+        geminiApiKey: apiKey, // empty = keep the saved key
+        vaultName: vaultName,
+        saveSubfolder: subfolder,
+        weeklySchedule: weeklySchedule,
+        flexibleSchedule: flexibleSchedule
+      }
+    });
+    applyConfig(data.config);
+    showToast('설정이 저장되었습니다. 로그인한 모든 기기에 적용됩니다.', 'success');
     closeConfigModal();
-    updateStatusPills();
     await checkExistingNote(); // Re-check with the new subfolder
   } catch (error) {
     showToast('설정 저장 중 오류: ' + error.message, 'error');
@@ -310,10 +433,10 @@ function closeConfigModal() {
 
 // Switch Settings Modal Tabs
 function switchModalTab(tab) {
-  const tabButtons = document.querySelectorAll('.modal-tab-btn');
+  const tabButtons = document.querySelectorAll('#config-modal .modal-tab-btn');
   tabButtons.forEach(btn => btn.classList.remove('active'));
 
-  const tabPanes = document.querySelectorAll('.modal-tab-pane');
+  const tabPanes = document.querySelectorAll('#config-modal .modal-tab-pane');
   tabPanes.forEach(pane => pane.classList.add('hidden'));
 
   if (tab === 'general') {
@@ -361,10 +484,14 @@ async function idbSet(key, value) {
   });
 }
 
+function vaultKey() {
+  return `vault:${state.username || ''}`;
+}
+
 // Restore the previously picked vault folder (permission may need re-granting)
 async function restoreVaultHandle() {
   try {
-    const handle = await idbGet('vault');
+    const handle = await idbGet(vaultKey());
     if (handle) {
       state.vaultHandle = handle;
       state.vaultPermission = await handle.queryPermission({ mode: 'readwrite' });
@@ -381,7 +508,7 @@ async function pickVaultFolder() {
     const handle = await window.showDirectoryPicker({ id: 'aoto-vault', mode: 'readwrite' });
     state.vaultHandle = handle;
     state.vaultPermission = await handle.queryPermission({ mode: 'readwrite' });
-    await idbSet('vault', handle);
+    await idbSet(vaultKey(), handle);
     updateStatusPills();
     showToast(`Vault 폴더가 연결되었습니다: ${handle.name}`, 'success');
     await checkExistingNote();
@@ -473,147 +600,6 @@ function loadSample() {
   showToast('작성 예시 텍스트를 불러왔습니다.', 'success');
 }
 
-// ---------------------------------------------------------------------------
-// Gemini (called directly from the browser)
-// ---------------------------------------------------------------------------
-
-function buildGeminiRequest(rawText, date, existingMarkdown) {
-  const config = state.config;
-
-  // Calculate weekday index and name to retrieve any fixed schedules.
-  // Parse YYYY-MM-DD as a local date so the weekday does not shift with the timezone.
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const KoreanDays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
-  const [y, m, d] = date.split('-').map(Number);
-  const dayIndex = new Date(y, m - 1, d).getDay();
-  const weekdayKey = days[dayIndex];
-  const weekdayKorean = KoreanDays[dayIndex];
-
-  const weeklySchedule = config.weeklySchedule || {};
-  const fixedScheduleForDay = weeklySchedule[weekdayKey] || '';
-  const flexibleSchedule = config.flexibleSchedule || '';
-
-  // System prompt directing the formatting for Obsidian Daily Notes
-  const systemInstruction = `
-You are a highly efficient personal assistant specializing in productivity, organization, and Obsidian vault note management.
-Your task is to take a user's raw, unstructured, and messy thoughts, notes, and tasks written for the next day, and organize them into a beautifully structured, clean, and highly readable daily note in Obsidian Markdown format.
-
-Follow these strict guidelines for formatting:
-1. Language: Write entirely in Korean. Keep the tone professional, neat, and highly motivating.
-2. NO EMOJIS: Do NOT use any emojis, icons, or visual symbols anywhere in the document (including headers, tasks, list points, callout titles, or description text). This is a strict constraint.
-3. Frontmatter: Start the note with exactly this YAML frontmatter:
----
-date: ${date}
-tags: [daily-notes, task-organizer, scheduler]
-status: organized
----
-
-4. NO Main Title: Do NOT include any main title or h1 header (like '# YYYY-MM-DD' or '# 데일리 노트') in the note content. The filename itself acts as the title. Directly start with the category headers (like '## 주요일정') after the frontmatter.
-
-5. Obsidian Checklist syntax: Use "- [ ] " for all task list items so that the user can check them off in Obsidian.
-6. Smart Categorization: Group all tasks intelligently into EXACTLY these four sections (NO emoji in headers) and output them in this EXACT order:
-   - "주요일정": Place only day-of-week fixed schedules (요일별 고정 일정) and rotating flexible schedules (이번주 유동 일정) here. This section must be at the very top. Do not place general daily tasks here.
-   - "학교": ONLY place tasks here if the user explicitly mentions "학교" (school) or "졸작" (graduation project) in the raw text. Do not place general academic/study tasks here unless those exact keywords are present.
-   - "연구실": Place all general academic-related work, studying, homework, reading papers, programming, lab tasks, research work, meetings, supervisor/professor tasks here, UNLESS the task explicitly mentions "학교" or "졸작". This is the default category for generic academic or study items.
-   - "기타": Place general workouts, daily chores, errands, shopping, resting, personal appointments, and other general non-academic/non-lab activities mentioned in the raw memo text here.
-7. NO Callout / AI Summary: Do NOT include any summary cards, callouts, or "내일을 위한 AI 한줄 평" at the end of the note. End the note directly after the last category.
-8. Handle ambiguities: If something is mentioned but doesn't have a clear category, place it neatly in the most logical of the three sections. Do not lose any information from the user's raw input. Do not make up tasks that were not in the raw input, but keep all original raw items.
-9. Deliver ONLY the pure Markdown content in the response. No wrapper codeblocks (like \`\`\`markdown) in the API output.
-`;
-
-  let userPromptText = `이것은 내가 작성한 무작위 메모와 할 일 목록이야. 위의 지침에 맞게 Obsidian 데일리 노트 마크다운으로 변환해줘.
-
-[나의 무작위 메모]:
-${rawText}`;
-
-  // Append fixed schedule if it exists for this weekday
-  if (fixedScheduleForDay && fixedScheduleForDay.trim()) {
-    userPromptText += `
-
-[해당 요일(${weekdayKorean})의 나의 주간 고정 일정]:
-${fixedScheduleForDay.trim()}
-(지침에 따라 위 고정 주간 일정을 '주요일정' 카테고리에 할 일 항목으로 포함하여 조립해줘.)`;
-  }
-
-  // Append flexible rotating schedules if present
-  if (flexibleSchedule && flexibleSchedule.trim()) {
-    userPromptText += `
-
-[나의 이번 주 유동 일정 (시간표 등)]:
-${flexibleSchedule.trim()}
-(위의 유동 일정 텍스트를 보고, 오늘의 요일(${weekdayKorean})에 해당하는 일정이 기재되어 있다면, 시간을 정교하게 파싱하려 하지 말고 텍스트에 쓰여 있는 일정 내용 그대로(예: '월요일 알바' 또는 '수요일 저녁 세미나') '주요일정' 카테고리에 체크박스 할 일 항목으로 심플하게 그대로 추가해줘. 오늘 요일과 전혀 관련 없는 요일의 일정은 절대로 추가하지 마.)`;
-  }
-
-  // If existing markdown was provided, instruct Gemini to perform an intelligent merge!
-  if (existingMarkdown && existingMarkdown.trim()) {
-    userPromptText = `이전에 생성된 기존 옵시디언 데일리 노트의 마크다운 내용이 아래에 있어. 그리고 새롭게 추가하려는 무작위 메모가 아래에 같이 적혀있어.
-지침에 맞게 기존 노트의 구조와 작업 완료 상태(이미 체크완료된 - [x] 항목 등)를 그대로 보존하면서, 새로운 메모의 할 일들을 적합한 카테고리에 똑똑하게 추가/병합해줘. 기존의 다른 일정이 절대 유실되지 않도록 철저하게 머지해줘.
-
-[기존 데일리 노트]:
-${existingMarkdown}
-
-[추가할 새로운 메모]:
-${rawText}`;
-  }
-
-  return {
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: userPromptText }]
-      }
-    ],
-    systemInstruction: {
-      parts: [{ text: systemInstruction }]
-    },
-    generationConfig: {
-      temperature: 0.3,
-      topP: 0.95,
-      topK: 40,
-      maxOutputTokens: 2048
-    }
-  };
-}
-
-async function callGemini(rawText, date, existingMarkdown) {
-  const requestBody = buildGeminiRequest(rawText, date, existingMarkdown);
-
-  // Use Gemini 2.5 Flash as standard fast and high quality model
-  const geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-
-  const apiResponse = await fetch(geminiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': state.config.geminiApiKey
-    },
-    body: JSON.stringify(requestBody)
-  });
-
-  if (!apiResponse.ok) {
-    let detail = '';
-    try {
-      const errJson = await apiResponse.json();
-      detail = errJson.error && errJson.error.message ? errJson.error.message : '';
-    } catch (e) { /* ignore */ }
-    throw new Error(`Gemini API 오류 (${apiResponse.status}) ${detail}`.trim());
-  }
-
-  const resJson = await apiResponse.json();
-  const part = resJson.candidates && resJson.candidates[0] && resJson.candidates[0].content &&
-    resJson.candidates[0].content.parts && resJson.candidates[0].content.parts[0];
-  if (!part || !part.text) {
-    throw new Error('Gemini API 응답에서 텍스트 내용을 추출하지 못했습니다.');
-  }
-
-  // Clean up any triple backticks wrapper that Gemini might have returned despite instructions
-  return part.text
-    .replace(/^```markdown\n/, '')
-    .replace(/^```\n/, '')
-    .replace(/\n```$/, '')
-    .trim();
-}
-
 // Generate Schedule by calling Gemini API
 async function generateTasks() {
   const rawText = document.getElementById('raw-memo').value.trim();
@@ -623,7 +609,7 @@ async function generateTasks() {
     return;
   }
 
-  if (!state.config.geminiApiKey) {
+  if (!state.config.hasApiKey) {
     showToast('Gemini API Key 설정이 필요합니다.', 'error');
     openConfigModal();
     return;
@@ -633,7 +619,11 @@ async function generateTasks() {
   setLoadingState(true);
 
   try {
-    const markdown = await callGemini(rawText, state.targetDate, state.existingMarkdown);
+    const data = await apiFetch('/api/generate', {
+      body: { rawText: rawText, date: state.targetDate, existingMarkdown: state.existingMarkdown }
+    });
+    const markdown = data.markdown;
+    if (!markdown) throw new Error('마크다운 데이터를 정상적으로 로드하지 못했습니다.');
     state.generatedMarkdown = markdown;
 
     // Update UI Result State

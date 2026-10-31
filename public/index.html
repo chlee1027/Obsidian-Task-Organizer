@@ -46,6 +46,10 @@
         <button class="icon-btn config-trigger" onclick="openConfigModal()" title="설정 열기">
           <i data-lucide="settings"></i>
         </button>
+        <span id="current-user" class="current-user"></span>
+        <button class="icon-btn" onclick="logout()" title="로그아웃">
+          <i data-lucide="log-out"></i>
+        </button>
       </div>
     </header>
 
@@ -219,7 +223,7 @@
         <div class="modal-body">
           <!-- Tab 1: General Settings -->
           <div id="modal-tab-general" class="modal-tab-pane">
-            <p class="modal-desc" style="margin-bottom: 16px;">AI 모델 연결 및 Obsidian 보관소를 연동합니다. 모든 설정은 이 브라우저에만 저장됩니다.</p>
+            <p class="modal-desc" style="margin-bottom: 16px;">AI 모델 연결 및 Obsidian 보관소를 연동합니다. 설정은 서버에 저장되어 로그인한 모든 기기에 적용됩니다(Vault 폴더 선택만 브라우저마다 따로).</p>
             
             <div class="form-group">
               <label for="api-key-input">
@@ -230,7 +234,7 @@
                 <i data-lucide="key"></i>
                 <input type="password" id="api-key-input" placeholder="AI Studio에서 발급받은 API 키 입력">
               </div>
-              <span class="field-hint">API 키는 서버로 보내지지 않고 이 브라우저(localStorage)에만 저장되며, Gemini API 호출에만 쓰입니다. 공용 PC에서는 입력하지 마세요.</span>
+              <span class="field-hint">API 키는 서버 저장소에만 보관되고 화면으로는 다시 내려오지 않습니다. 한 번 저장하면 새 키를 입력할 때까지 그대로 쓰입니다.</span>
             </div>
 
             <!-- Chrome/Edge desktop: direct folder access -->
@@ -342,6 +346,58 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Login / Sign-up Screen -->
+  <div id="login-overlay" class="modal-overlay" style="z-index: 2000;">
+    <form class="modal-card login-card" onsubmit="submitLogin(event)">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i data-lucide="lock"></i>
+          <h3 id="login-title">AOTO 로그인</h3>
+        </div>
+      </div>
+
+      <div class="modal-tabs">
+        <button id="auth-tab-login" class="modal-tab-btn active" type="button" onclick="setAuthMode('login')">
+          <i data-lucide="log-in"></i> 로그인
+        </button>
+        <button id="auth-tab-signup" class="modal-tab-btn" type="button" onclick="setAuthMode('signup')">
+          <i data-lucide="user-plus"></i> 가입
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="login-username"><span>아이디</span></label>
+          <div class="input-with-icon">
+            <i data-lucide="user"></i>
+            <input type="text" id="login-username" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="영문 소문자·숫자 3~20자">
+          </div>
+        </div>
+        <div class="form-group" style="margin-top: 14px;">
+          <label for="login-password"><span>비밀번호</span></label>
+          <div class="input-with-icon">
+            <i data-lucide="key-round"></i>
+            <input type="password" id="login-password" autocomplete="current-password" placeholder="비밀번호 입력">
+          </div>
+        </div>
+        <div id="signup-code-group" class="form-group hidden" style="margin-top: 14px;">
+          <label for="signup-code"><span>가입 코드</span></label>
+          <div class="input-with-icon">
+            <i data-lucide="ticket"></i>
+            <input type="text" id="signup-code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="관리자에게 받은 가입 코드">
+          </div>
+          <span class="field-hint">비밀번호는 8자 이상. 가입하면 설정과 Gemini API 키를 각자 따로 저장합니다.</span>
+        </div>
+        <span id="login-error" class="field-hint login-error"></span>
+      </div>
+      <div class="modal-footer">
+        <button id="auth-submit" type="submit" class="primary-btn accent-btn">
+          <i data-lucide="log-in"></i> <span id="auth-submit-text">로그인</span>
+        </button>
+      </div>
+    </form>
   </div>
 
   <!-- Toast Notifications -->

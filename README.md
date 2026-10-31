@@ -2,7 +2,7 @@
 
 > **AI-Powered Obsidian Task Organizer**
 >
-> 전날 적어 둔 무작위 메모와 할 일 목록을 Gemini API 로 정리해 Obsidian 데일리 노트(`.md`)로 바꾸고, Obsidian 보관소(Vault)에 바로 저장하는 웹 앱입니다. 서버 없이 브라우저만으로 동작하므로 Vercel 같은 정적 호스팅에 그대로 배포할 수 있습니다.
+> 전날 적어 둔 무작위 메모와 할 일 목록을 Gemini API 로 정리해 Obsidian 데일리 노트(`.md`)로 바꾸고, Obsidian 보관소(Vault)에 바로 저장하는 웹 앱입니다. Vercel 에 배포해 여러 사람이 각자 계정으로 로그인해서 쓰며, 설정과 Gemini API 키는 사람마다 따로 서버에 저장되어 그 사람이 로그인한 모든 기기에서 같게 보입니다.
 
 ---
 
@@ -42,12 +42,15 @@ iCloud Drive 에 둔 보관소라면, PC 에서는 방식 1로 `iCloud Drive/Obs
 
 ---
 
-## 설정 저장 위치와 API 키
+## 계정과 설정 저장
 
-- Gemini API 키, 고정·유동 일정 같은 설정은 **각 사용자 브라우저의 localStorage** 에만 저장됩니다. 서버가 없으므로 배포한 사이트 운영자에게도 키가 전달되지 않습니다.
-- API 키는 브라우저에서 Google Gemini API(`generativelanguage.googleapis.com`)로만 보내집니다.
-- 브라우저의 저장 데이터를 지우면 설정도 지워집니다. 공용 PC 에서는 키를 입력하지 마세요.
-- PC 와 iPhone 은 설정을 따로 저장하므로 기기마다 한 번씩 입력해야 합니다.
+- 사이트에 들어가면 로그인 화면이 먼저 뜹니다. 처음이면 **가입** 탭에서 아이디, 비밀번호(8자 이상), **가입 코드**를 넣어 가입합니다. 가입 코드는 관리자가 Vercel 환경 변수 `SIGNUP_CODE` 로 정하고, 쓰게 할 사람에게만 알려 줍니다. `SIGNUP_CODE` 가 비어 있으면 가입이 막힙니다.
+- 아이디는 영문 소문자, 숫자, `_`, `-` 로 3~20자입니다. 비밀번호는 scrypt 해시로만 저장됩니다.
+- 한 번 로그인하면 그 브라우저는 365일 동안 로그인이 유지됩니다(로그아웃 버튼을 누르면 끝남).
+- 같은 IP 에서 로그인 비밀번호나 가입 코드를 합쳐 10번 틀리면 그 IP 는 15분 동안 막힙니다.
+- **설정은 사람마다 따로** 저장됩니다. Gemini API 키, 보관소 이름, 하위 폴더, 고정·유동 일정이 서버 저장소(Upstash Redis)에 아이디별로 들어가고, 설정 창에서 바꿀 때까지 그대로 유지됩니다. 다른 사람의 설정이나 키는 보이지도 쓰이지도 않습니다.
+- API 키는 서버에만 있고 브라우저로는 내려오지 않습니다. Gemini 호출도 서버(`/api/generate`)가 그 사람의 키로 합니다. 설정 창의 키 칸을 비워 두고 저장하면 저장된 키를 그대로 씁니다.
+- 예외는 PC Chrome/Edge 의 **Vault 폴더 선택**입니다. 브라우저 보안 규칙상 폴더 접근 권한은 서버에 둘 수 없어 브라우저마다(같은 브라우저라도 아이디마다) 한 번 골라야 합니다. 다시 방문할 때 Chrome 이 접근 허용을 물으면 "방문할 때마다 허용"을 고르면 다음부터 묻지 않습니다.
 
 [Google AI Studio](https://aistudio.google.com/app/apikey) 에서 API 키를 발급받을 수 있습니다.
 
@@ -55,11 +58,16 @@ iCloud Drive 에 둔 보관소라면, PC 에서는 방식 1로 `iCloud Drive/Obs
 
 ## 배포 (Vercel)
 
-1. Vercel 에서 **Add New > Project** 로 이 저장소를 가져옵니다.
-2. Framework Preset 은 **Other** 그대로 둡니다. 빌드 단계가 없고, `vercel.json` 이 `public/` 폴더를 배포 대상으로 지정합니다.
-3. **Deploy** 를 누르면 `https://<프로젝트 이름>.vercel.app` 주소가 생깁니다.
+1. Vercel 에서 **Add New > Project** 로 이 저장소를 가져옵니다. Framework Preset 은 **Other** 그대로 둡니다.
+2. 프로젝트의 **Storage** 탭에서 **Upstash (Redis)** 를 만들고 이 프로젝트에 연결합니다. Primary Region 은 Vercel 함수 기본 지역과 같은 `us-east-1` 을 고릅니다. 연결하면 `KV_REST_API_URL`, `KV_REST_API_TOKEN` 환경 변수가 자동으로 들어갑니다(`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` 이름도 인식합니다). 무료 요금제로 충분합니다.
+3. **Settings > Environment Variables** 에 `SIGNUP_CODE` 를 추가합니다.
+4. 환경 변수는 새 배포부터 적용되므로 **Deployments** 에서 최신 배포를 **Redeploy** 합니다.
 
-환경 변수는 필요 없습니다.
+| 환경 변수 | 필수 | 내용 |
+|---|---|---|
+| `SIGNUP_CODE` | 예(가입하려면) | 가입 코드. 바꾸면 그다음 가입부터 새 코드가 필요하고, 이미 가입한 계정은 그대로 |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | 예 | Upstash 연결 시 자동 입력 |
+| `SESSION_SECRET` | 아니오 | 로그인 쿠키 서명 키. 비우면 처음 쓸 때 무작위 값을 만들어 Redis 에 보관 |
 
 ## 로컬 실행
 
@@ -67,7 +75,7 @@ iCloud Drive 에 둔 보관소라면, PC 에서는 방식 1로 `iCloud Drive/Obs
 npm run dev
 ```
 
-`http://localhost:3000` 으로 접속합니다. 폴더 직접 저장(방식 1)은 `https://` 또는 `localhost` 에서만 동작하므로, `index.html` 을 파일로 바로 열지 말고 위 명령으로 띄워야 합니다.
+Vercel CLI(`vercel dev`)로 화면과 `/api` 함수를 함께 띄웁니다. `.env` 파일이나 `vercel env pull` 로 `SIGNUP_CODE` 를 넣어야 가입할 수 있고, Redis 환경 변수가 없으면 로컬에서는 메모리에 저장합니다(서버를 끄면 사라짐). 폴더 직접 저장(방식 1)은 `https://` 또는 `localhost` 에서만 동작합니다.
 
 ---
 
