@@ -1,8 +1,8 @@
 {
-  "name": "obsidian-ai-scheduler",
+  "name": "obsidian-task-organizer",
   "version": "2.0.0",
   "private": true,
-  "description": "AI-Powered Daily Note Organizer for Obsidian (Vercel web app)",
+  "description": "AI daily-note organizer for Obsidian: turns messy memos into categorized checklists with Gemini (Vercel web app with per-user accounts)",
   "scripts": {
     "dev": "npx --yes vercel dev"
   },
