@@ -382,14 +382,7 @@
             <input type="password" id="login-password" autocomplete="current-password" placeholder="비밀번호 입력">
           </div>
         </div>
-        <div id="signup-code-group" class="form-group hidden" style="margin-top: 14px;">
-          <label for="signup-code"><span>가입 코드</span></label>
-          <div class="input-with-icon">
-            <i data-lucide="ticket"></i>
-            <input type="text" id="signup-code" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="관리자에게 받은 가입 코드">
-          </div>
-          <span class="field-hint">비밀번호는 8자 이상. 가입하면 설정과 Gemini API 키를 각자 따로 저장합니다.</span>
-        </div>
+        <span id="signup-hint" class="field-hint hidden" style="display: block; margin-top: 10px;">비밀번호는 8자 이상. 가입하면 설정과 Gemini API 키를 각자 따로 저장합니다.</span>
         <span id="login-error" class="field-hint login-error"></span>
       </div>
       <div class="modal-footer">

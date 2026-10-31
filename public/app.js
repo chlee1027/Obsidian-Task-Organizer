@@ -12,7 +12,6 @@ const FS_SUPPORTED = typeof window.showDirectoryPicker === 'function';
 const state = {
   username: null,
   authMode: 'login',          // 'login' | 'signup'
-  signupOpen: true,
   config: {
     hasApiKey: false,
     vaultName: '',              // Used for obsidian:// URIs
@@ -70,7 +69,6 @@ async function initApp() {
   } catch (error) {
     session = null;
   }
-  state.signupOpen = !session || session.signupOpen !== false;
   if (session && session.authenticated) {
     await onLoggedIn(session.username);
   } else {
@@ -110,8 +108,7 @@ async function apiFetch(url, options = {}, { allowUnauthenticated = false } = {}
 
 function showLogin(message) {
   document.getElementById('login-overlay').classList.add('active');
-  document.getElementById('auth-tab-signup').classList.toggle('hidden', !state.signupOpen);
-  setAuthMode(state.signupOpen ? state.authMode : 'login');
+  setAuthMode(state.authMode);
   document.getElementById('login-error').textContent = message || '';
   document.getElementById('login-password').value = '';
   setTimeout(() => document.getElementById('login-username').focus(), 50);
@@ -122,7 +119,7 @@ function setAuthMode(mode) {
   const signup = mode === 'signup';
   document.getElementById('auth-tab-login').classList.toggle('active', !signup);
   document.getElementById('auth-tab-signup').classList.toggle('active', signup);
-  document.getElementById('signup-code-group').classList.toggle('hidden', !signup);
+  document.getElementById('signup-hint').classList.toggle('hidden', !signup);
   document.getElementById('login-title').textContent = signup ? 'AOTO 가입' : 'AOTO 로그인';
   document.getElementById('auth-submit-text').textContent = signup ? '가입하고 시작하기' : '로그인';
   document.getElementById('login-password').setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
@@ -133,27 +130,21 @@ async function submitLogin(event) {
   if (event) event.preventDefault();
   const username = document.getElementById('login-username').value.trim().toLowerCase();
   const password = document.getElementById('login-password').value;
-  const code = document.getElementById('signup-code').value.trim();
   const errorEl = document.getElementById('login-error');
   if (!username || !password) {
     errorEl.textContent = '아이디와 비밀번호를 입력해주세요.';
     return;
   }
   const signup = state.authMode === 'signup';
-  if (signup && !code) {
-    errorEl.textContent = '가입 코드를 입력해주세요.';
-    return;
-  }
   try {
     const data = await apiFetch(signup ? '/api/signup' : '/api/login', {
-      body: signup ? { username, password, code } : { username, password }
+      body: { username, password }
     }, { allowUnauthenticated: true });
     if (!data.success) {
       errorEl.textContent = data.error || '실패했습니다.';
       return;
     }
     document.getElementById('login-overlay').classList.remove('active');
-    document.getElementById('signup-code').value = '';
     await onLoggedIn(data.username);
     if (signup) {
       showToast('가입되었습니다. 설정에서 Gemini API 키를 먼저 등록해주세요.', 'success');
