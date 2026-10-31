@@ -1,11 +1,11 @@
 {
   "name": "obsidian-ai-scheduler",
-  "version": "1.0.0",
-  "description": "AI-Powered Daily Note Organizer for Obsidian",
-  "main": "server.js",
+  "version": "2.0.0",
+  "private": true,
+  "description": "AI-Powered Daily Note Organizer for Obsidian (static web app)",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "npx --yes serve public -l 3000",
+    "start": "npx --yes serve public -l 3000"
   },
   "keywords": [
     "obsidian",
@@ -14,10 +14,5 @@
     "scheduler",
     "todo"
   ],
-  "author": "Antigravity",
-  "license": "MIT",
-  "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.19.2"
-  }
+  "license": "MIT"
 }

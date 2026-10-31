@@ -1101,6 +1101,7 @@ body {
   flex-direction: column;
   gap: 10px;
   z-index: 1000;
+  pointer-events: none; /* Toasts are not interactive; never block the buttons beneath */
 }
 
 .toast {
@@ -1367,4 +1368,21 @@ body {
 
 .tool-btn:active {
   transform: translateY(0);
+}
+
+/* Narrow screens: put the save button on its own full-width row */
+@media (max-width: 600px) {
+  .action-footer {
+    flex-wrap: wrap;
+  }
+
+  .action-footer .glow-green-btn {
+    flex-basis: 100%;
+    order: -1;
+  }
+
+  .action-footer .secondary-btn {
+    padding: 12px 10px;
+    white-space: nowrap;
+  }
 }

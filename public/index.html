@@ -38,7 +38,7 @@
           <i data-lucide="key"></i>
           <span class="status-text">API Key 미설정</span>
         </div>
-        <div id="status-vault" class="status-pill status-error" onclick="openConfigModal()">
+        <div id="status-vault" class="status-pill status-error" onclick="onVaultPillClick()">
           <span class="status-indicator"></span>
           <i data-lucide="folder"></i>
           <span class="status-text">Vault 미설정</span>
@@ -178,6 +178,10 @@
             <i data-lucide="copy" id="copy-icon"></i>
             <span id="copy-text">클립보드 복사</span>
           </button>
+          <button class="secondary-btn" onclick="downloadMarkdown()">
+            <i data-lucide="download"></i>
+            <span>.md 파일 받기</span>
+          </button>
           <button class="primary-btn glow-green-btn" onclick="saveToObsidian()">
             <i data-lucide="save"></i>
             <span>Obsidian 보관소에 저장</span>
@@ -215,7 +219,7 @@
         <div class="modal-body">
           <!-- Tab 1: General Settings -->
           <div id="modal-tab-general" class="modal-tab-pane">
-            <p class="modal-desc" style="margin-bottom: 16px;">AI 모델 연결 및 컴퓨터의 Obsidian 보관소 경로를 연동합니다.</p>
+            <p class="modal-desc" style="margin-bottom: 16px;">AI 모델 연결 및 Obsidian 보관소를 연동합니다. 모든 설정은 이 브라우저에만 저장됩니다.</p>
             
             <div class="form-group">
               <label for="api-key-input">
@@ -226,18 +230,30 @@
                 <i data-lucide="key"></i>
                 <input type="password" id="api-key-input" placeholder="AI Studio에서 발급받은 API 키 입력">
               </div>
-              <span class="field-hint">API 키는 서버 컴퓨터 로컬 `config.json`에만 안전하게 보관됩니다.</span>
+              <span class="field-hint">API 키는 서버로 보내지지 않고 이 브라우저(localStorage)에만 저장되며, Gemini API 호출에만 쓰입니다. 공용 PC에서는 입력하지 마세요.</span>
             </div>
 
-            <div class="form-group" style="margin-top: 16px;">
-              <label for="vault-path-input">
-                <span>Obsidian Vault 경로</span>
+            <!-- Chrome/Edge desktop: direct folder access -->
+            <div id="vault-fs-group" class="form-group hidden" style="margin-top: 16px;">
+              <label>
+                <span>Obsidian Vault 폴더</span>
+              </label>
+              <button class="tool-btn" type="button" onclick="pickVaultFolder()" style="width: 100%;">
+                <i data-lucide="folder-open"></i> Vault 폴더 선택: <span id="vault-folder-name">선택된 폴더 없음</span>
+              </button>
+              <span class="field-hint">옵시디언 보관소 폴더(iCloud Drive 안의 보관소도 가능)를 한 번 선택하면 노트를 그 폴더에 바로 저장하고 불러옵니다. 브라우저를 다시 열면 접근 허용을 한 번 더 묻습니다.</span>
+            </div>
+
+            <!-- Safari/iPhone, Firefox: hand the note to the Obsidian app -->
+            <div id="vault-uri-group" class="form-group hidden" style="margin-top: 16px;">
+              <label for="vault-name-input">
+                <span>Obsidian Vault 이름</span>
               </label>
               <div class="input-with-icon">
                 <i data-lucide="folder-open"></i>
-                <input type="text" id="vault-path-input" placeholder="예: C:\Users\YourName\Documents\Obsidian\MyVault">
+                <input type="text" id="vault-name-input" placeholder="예: MyVault">
               </div>
-              <span class="field-hint">윈도우 파일 탐색기에서 옵시디언 보관소 폴더 경로를 복사하여 붙여넣으세요.</span>
+              <span class="field-hint">이 브라우저는 폴더 직접 저장을 지원하지 않아, 저장 버튼을 누르면 Obsidian 앱이 열리며 노트가 만들어집니다. Obsidian 앱에 보이는 보관소 이름을 그대로 적으세요. 같은 날짜 노트가 있으면 덮어씁니다.</span>
             </div>
 
             <div class="form-group" style="margin-top: 16px;">
@@ -267,7 +283,7 @@
             <p class="modal-desc" style="margin-bottom: 16px;">요일별 정기 학교 수업 시간표와 연구실 정기 세미나 일정을 설정합니다.</p>
             
             <div class="form-group">
-              <label>📅 주간 고정 일정 설정 (쉼표로 일정 구분)</label>
+              <label>주간 고정 일정 설정 (쉼표로 일정 구분)</label>
               <span class="field-hint" style="margin-bottom: 8px;">각 요일별 고정 일정을 입력하면 해당 요일 노트를 정리할 때 AI가 자동으로 추가해 줍니다.</span>
               
               <div class="weekly-schedule-grid">
@@ -308,7 +324,7 @@
             <p class="modal-desc" style="margin-bottom: 16px;">매주 유동적으로 바뀌는 회의, 근무, 약속 등의 변동 시간표를 통째로 붙여넣어 관리합니다.</p>
             
             <div class="form-group">
-              <label for="flexible-schedule-input">📋 이번 주 유동 일정 (교대근무 및 변동 일정 등)</label>
+              <label for="flexible-schedule-input">이번 주 유동 일정 (교대근무 및 변동 일정 등)</label>
               <div class="input-with-icon">
                 <i data-lucide="calendar-range"></i>
                 <input type="text" id="flexible-schedule-input" placeholder="예: 이번주 일정: 월 14-18시, 수 12-16시 (텍스트 통째로 붙여넣기 가능)">
