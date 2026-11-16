@@ -1,10 +1,10 @@
 # Obsidian Task Organizer (AOTO)
 
-전날 생각나는 대로 적어 둔 메모와 할 일을 Gemini API 로 정리해 Obsidian 데일리 노트(`.md`)로 만들고, Obsidian 보관소(Vault)에 바로 저장하는 웹 앱입니다.
+전날 생각나는 대로 적어 둔 메모와 할 일을 Gemini API 또는 Claude API 로 정리해 Obsidian 데일리 노트(`.md`)로 만들고, Obsidian 보관소(Vault)에 바로 저장하는 웹 앱입니다.
 
 - 사이트: https://organizer-eta-beryl.vercel.app (아이디와 비밀번호만 정하면 누구나 가입할 수 있습니다)
 - Vercel 에 배포해서 씁니다. 여러 사람이 각자 계정으로 로그인합니다.
-- Gemini API 키와 설정(고정 일정, 유동 일정, 저장 위치)은 **사람마다 따로 서버에 저장**됩니다. 한 번 저장하면 그 사람이 로그인한 모든 기기(PC, iPhone)에서 같은 설정이 보이고, 직접 바꿀 때까지 유지됩니다.
+- 정리에 쓸 AI(Gemini 또는 Claude)와 그 API 키, 설정(고정 일정, 유동 일정, 저장 위치)은 **사람마다 따로 서버에 저장**됩니다. 한 번 저장하면 그 사람이 로그인한 모든 기기(PC, iPhone)에서 같은 설정이 보이고, 직접 바꿀 때까지 유지됩니다.
 - 보관소(Vault)는 Obsidian 이 노트를 모아 두는 폴더를 말합니다.
 
 ---
@@ -20,7 +20,7 @@
 - 마트 들러서 우유 사가기
 ```
 
-결과(보관소에 `Daily Notes/2026-11/2026-11-02.md` 로 저장되는 내용의 형태. 항목 문장은 Gemini 가 매번 새로 쓰므로 실제와 다를 수 있음):
+결과(보관소에 `Daily Notes/2026-11/2026-11-02.md` 로 저장되는 내용의 형태. 항목 문장은 AI 가 매번 새로 쓰므로 실제와 다를 수 있음):
 
 ```markdown
 ---
@@ -61,7 +61,10 @@ status: organized
 ## 사용 방법
 
 1. 사이트에 들어가면 로그인 화면이 뜹니다. 처음이면 **가입** 탭에서 아이디와 비밀번호(8자 이상)를 정해 가입합니다. 가입하면 바로 로그인됩니다.
-2. 가입하면 설정 창이 열립니다. [Google AI Studio](https://aistudio.google.com/app/apikey) 에서 받은 **Gemini API 키**를 넣고 저장합니다. 상단 표시가 `API Key 연결됨` 으로 바뀌면 됩니다.
+2. 가입하면 설정 창이 열립니다. **정리에 쓸 AI** 를 고르고 그 키를 넣고 저장합니다. 상단 표시가 `API Key 연결됨 (Gemini)` 또는 `(Claude)` 로 바뀌면 됩니다.
+   - Gemini: [Google AI Studio](https://aistudio.google.com/app/apikey) 에서 받은 키
+   - Claude: [Claude Console](https://console.anthropic.com/settings/keys) 에서 받은 키(`sk-ant-` 로 시작)
+   - 두 키를 모두 저장해 두고 설정 창에서 AI 만 바꿔 쓸 수 있습니다.
 3. 저장 위치를 정합니다(브라우저에 따라 다름, 아래 표).
    - PC Chrome·Edge: 설정 창의 **Vault 폴더 선택** 버튼으로 보관소 폴더를 고릅니다.
    - iPhone Safari 등: 설정 창의 **Obsidian Vault 이름** 에 Obsidian 앱에 보이는 보관소 이름을 그대로 적습니다.
@@ -94,16 +97,16 @@ iCloud Drive 에 둔 보관소라면, PC 에서는 방식 1로 `iCloud Drive/Obs
 | 무엇 | 어디에 저장 | 비고 |
 |---|---|---|
 | 아이디, 비밀번호 | 서버(Upstash Redis) | 비밀번호는 scrypt 해시만 저장, 원문은 저장하지 않음 |
-| Gemini API 키 | 서버, 아이디별 | AES-256-GCM 으로 암호화해 저장(비밀값은 환경 변수 `KEY_ENCRYPTION_SECRET`, Redis 에 두지 않음). 브라우저로 내려보내지 않음. 생성 요청은 서버(`/api/generate`)가 그 사람의 키로 Gemini 에 보냄 |
+| Gemini·Claude API 키 | 서버, 아이디별 | AES-256-GCM 으로 암호화해 저장(비밀값은 환경 변수 `KEY_ENCRYPTION_SECRET`, Redis 에 두지 않음). 브라우저로 내려보내지 않음. 생성 요청은 서버(`/api/generate`)가 그 사람이 고른 AI 에 그 사람의 키로 보냄 |
 | 고정·유동 일정, Vault 이름, 하위 폴더 | 서버, 아이디별 | 그 사람이 로그인한 모든 기기에 같게 적용 |
 | Vault 폴더 접근 권한(방식 1) | 그 브라우저 안(IndexedDB), 아이디별 | 브라우저 보안 규칙상 서버에 둘 수 없음. 브라우저마다 한 번 고름 |
 | 로그인 상태 | 브라우저 쿠키(HttpOnly, 서명됨) | 365일 유지, 로그아웃 버튼으로 끝냄 |
 
 - 아이디는 영문 소문자, 숫자, `_`, `-` 로 3~20자입니다.
-- 가입은 열려 있어 사이트 주소를 아는 누구나 할 수 있습니다. 각자 자기 Gemini API 키를 넣어 쓰므로 다른 사람의 사용량이 내 키로 나가지는 않습니다.
+- 가입은 열려 있어 사이트 주소를 아는 누구나 할 수 있습니다. 각자 자기 API 키를 넣어 쓰므로 다른 사람의 사용량이 내 키로 나가지는 않습니다.
 - 자동 프로그램이 계정을 대량으로 만들지 못하도록, 같은 IP 에서는 1시간에 5개까지만 가입됩니다.
 - 같은 IP 에서 로그인 비밀번호를 10번 틀리면 그 IP 는 15분 동안 로그인이 막힙니다.
-- 설정 창의 API 키 칸은 저장 뒤 비어 보입니다. 비워 둔 채 저장하면 저장된 키를 그대로 쓰고, 새 키를 적고 저장하면 바뀝니다.
+- 설정 창의 API 키 칸(Gemini, Claude 각각)은 저장 뒤 비어 보입니다. 비워 둔 채 저장하면 저장된 키를 그대로 쓰고, 새 키를 적고 저장하면 바뀝니다.
 - 같은 브라우저에서 로그아웃하고 다른 사람이 로그인하면, 앞사람의 메모·결과·설정·Vault 폴더는 화면에서 모두 비워집니다.
 
 ---
@@ -130,8 +133,10 @@ iCloud Drive 에 둔 보관소라면, PC 에서는 방식 1로 `iCloud Drive/Obs
 | 이름 | 필수 | 내용 |
 |---|---|---|
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | 필수 | Upstash 연결 시 자동 입력. `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` 이름도 인식 |
-| `KEY_ENCRYPTION_SECRET` | 필수 | 사용자 Gemini API 키 암호화(AES-256-GCM)용 비밀값. 아무 문자열이나 되며 SHA-256 으로 32바이트 키를 만듦. 위 3단계 명령으로 만든 값을 권함. 없으면 키 저장이 오류로 막힘. 값을 바꾸거나 잃으면 저장된 키를 풀 수 없어 사용자가 키를 다시 넣어야 함. 이 기능 전에 저장된 평문 키는 그대로 읽히고, 이 값이 있을 때 읽히면 암호화해 다시 저장됨 |
+| `KEY_ENCRYPTION_SECRET` | 필수 | 사용자 API 키(Gemini·Claude) 암호화(AES-256-GCM)용 비밀값. 아무 문자열이나 되며 SHA-256 으로 32바이트 키를 만듦. 위 3단계 명령으로 만든 값을 권함. 없으면 키 저장이 오류로 막힘. 값을 바꾸거나 잃으면 저장된 키를 풀 수 없어 사용자가 키를 다시 넣어야 함. 이 기능 전에 저장된 평문 키는 그대로 읽히고, 이 값이 있을 때 읽히면 암호화해 다시 저장됨 |
 | `GEMINI_MODEL` | 선택 | 쓸 Gemini 모델 이름. 비우면 `gemini-3.8-flash` |
+| `CLAUDE_MODEL` | 선택 | 쓸 Claude 모델 이름. 비우면 `claude-sonnet-5-5` |
+| `CLAUDE_EFFORT` | 선택 | Claude 사고 깊이 `low`, `medium`, `high`, `xhigh`, `max` 중 하나. 비우면 모델 기본값(Sonnet 5.5 는 `high`). 낮출수록 빠르고 토큰을 덜 씀 |
 | `SESSION_SECRET` | 선택 | 로그인 쿠키 서명 키. 비우면 처음 쓸 때 무작위 값을 만들어 Redis 에 보관. 값을 바꾸면 모든 기기가 로그아웃됨 |
 
 ---
@@ -146,6 +151,10 @@ iCloud Drive 에 둔 보관소라면, PC 에서는 방식 1로 `iCloud Drive/Obs
 | `Gemini API 오류 (403) The Gemini API free tier is not available for this project` | 그 키가 속한 Google 프로젝트가 무료 사용 대상이 아님(Google 이 프로젝트 단위로 판단). 같은 프로젝트에서 키를 새로 만들어도 같음 | [AI Studio 결제 페이지](https://aistudio.google.com/billing)에서 결제 계정을 연결. 사용한 만큼 요금이 나가므로 Google Cloud Billing 에 예산 알림을 걸어 두기를 권함 |
 | `Gemini API 오류 (400) API key not valid` | 키를 잘못 넣음 | 설정 창에 키를 다시 넣고 저장 |
 | `Gemini 응답이 길이 한도에 걸려 비어 있습니다` | 모델이 생각하는 데 응답 한도(16,384 토큰)를 다 씀 | 메모를 나눠서 다시 정리 |
+| `Claude API 키가 올바르지 않습니다` | Claude 키를 잘못 넣었거나 그 키가 지워짐 | 설정 창에 Claude 키를 다시 넣고 저장 |
+| `Claude API 요청 한도에 걸렸습니다` | 그 키의 분당 요청·토큰 한도를 넘음 | 잠시 뒤 다시 시도. 자주 걸리면 Claude Console 에서 한도·결제 확인 |
+| `Claude 응답이 길이 한도에 걸려 잘렸습니다` | 응답이 16,000 토큰 한도를 넘음 | 메모를 나눠서 다시 정리 |
+| `Claude API 응답이 시간 안에 오지 않았습니다` | 55초 안에 답이 오지 않음(생성 함수 최대 60초) | 메모를 나눠서 다시 정리하거나 `CLAUDE_EFFORT` 를 낮춤 |
 | `서버 설정 오류: KEY_ENCRYPTION_SECRET 환경 변수가 없어` | 배포에 암호화 비밀값이 없음 | 배포 3단계를 하고 Redeploy |
 | `저장된 API 키를 풀 수 없습니다` | `KEY_ENCRYPTION_SECRET` 값이 저장할 때와 다름(바뀜·잃음) | 설정 창에 API 키를 다시 넣고 저장 |
 | `저장소(Upstash Redis)가 연결되지 않았습니다` | Upstash 가 프로젝트에 연결되지 않음 | 배포 2단계를 하고 Redeploy |
@@ -168,12 +177,14 @@ api/               Vercel 서버 함수 (주소 /api/<파일 이름>)
   logout.js        로그아웃
   session.js       로그인 상태 확인
   config.js        내 설정 읽기·저장 (API 키는 읽기 응답에 넣지 않음)
-  generate.js      내 설정과 키로 Gemini 호출
+  generate.js      내 설정과 키로 고른 AI(Gemini 또는 Claude) 호출
 lib/               서버 함수가 함께 쓰는 코드
   http.js          요청·응답 처리, 비밀번호 해시, 로그인 쿠키, 실패 횟수 제한
   store.js         Upstash Redis 접근 (REST API)
-  gemini.js        Gemini 프롬프트와 호출
-  keybox.js        Gemini API 키 암호화·복호화(AES-256-GCM), 옛 평문 키 재저장
+  prompt.js        두 AI 가 같이 쓰는 프롬프트(지침·메모·일정 조립)
+  gemini.js        Gemini 호출
+  claude.js        Claude 호출(Anthropic SDK, 거절 시 서버 쪽 대체 모델)
+  keybox.js        API 키 암호화·복호화(AES-256-GCM), 옛 평문 키 재저장
 test/              node:test 시험 (`npm test`)
 vercel.json        배포 설정 (public/ 출력, 보안 헤더, 생성 함수 최대 60초)
 ```
@@ -189,7 +200,7 @@ npm run dev
 Vercel CLI(`vercel dev`)로 화면과 `/api` 함수를 함께 띄웁니다. 처음에는 Vercel 로그인과 프로젝트 연결을 묻습니다.
 
 - 쓰는 환경 변수 이름은 `.env.example` 에 있습니다. API 키를 저장해 보려면 로컬에서도 `KEY_ENCRYPTION_SECRET` 이 있어야 합니다.
-- 시험은 `npm test` 로 돌립니다(의존성 없음).
+- 시험은 `npm install` 뒤 `npm test` 로 돌립니다. 실제 API 는 부르지 않습니다. `main` 에 push 하거나 PR 을 올리면 GitHub Actions 가 같은 시험을 Node 20·22·24 에서 돌립니다.
 - 배포 환경의 환경 변수는 `vercel env pull` 로 받을 수 있습니다. 받은 `.env` 파일은 `.gitignore` 에 들어 있어 커밋되지 않습니다.
 - Redis 환경 변수가 없으면 로컬에서는 메모리에 저장하고, 서버를 끄면 지워집니다. Vercel 에 배포된 환경(Production, Preview)에서는 Redis 가 없으면 오류를 냅니다.
 - 폴더 직접 저장(방식 1)은 `https://` 주소나 `localhost` 에서만 동작합니다.

@@ -1,6 +1,7 @@
 const { sendJson, readJsonBody, isJsonRequest, requireUser, configKey } = require('../lib/http');
 const { getJson } = require('../lib/store');
 const { callGemini } = require('../lib/gemini');
+const { callClaude } = require('../lib/claude');
 const { decryptSecret, migrateLegacyKey } = require('../lib/keybox');
 
 module.exports = async (req, res) => {
@@ -21,12 +22,17 @@ module.exports = async (req, res) => {
 
     const key = configKey(username);
     const config = await migrateLegacyKey(key, (await getJson(key)) || {});
-    if (!config.geminiApiKey) {
-      return sendJson(res, 400, { error: 'Gemini API Key가 등록되지 않았습니다. 설정에서 먼저 등록해주세요.' });
+    // Older configs have no provider field; they were Gemini-only
+    const useClaude = config.provider === 'claude';
+    const storedKey = useClaude ? config.claudeApiKey : config.geminiApiKey;
+    if (!storedKey) {
+      const name = useClaude ? 'Claude' : 'Gemini';
+      return sendJson(res, 400, { error: `${name} API Key가 등록되지 않았습니다. 설정에서 먼저 등록해주세요.` });
     }
 
-    const markdown = await callGemini(
-      decryptSecret(config.geminiApiKey),
+    const call = useClaude ? callClaude : callGemini;
+    const markdown = await call(
+      decryptSecret(storedKey),
       config,
       rawText.slice(0, 20000),
       date,

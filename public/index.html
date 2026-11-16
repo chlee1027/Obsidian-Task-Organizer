@@ -161,7 +161,7 @@
                 <div></div><div></div>
               </div>
             </div>
-            <h3>Gemini AI 분석 중</h3>
+            <h3 id="loading-title">AI 분석 중</h3>
             <p>무작위 메모를 분류하고, 시간 순서대로 정렬하여 최적의 데일리 루틴을 조직하고 있습니다.</p>
           </div>
 
@@ -226,6 +226,21 @@
             <p class="modal-desc" style="margin-bottom: 16px;">AI 모델 연결 및 Obsidian 보관소를 연동합니다. 설정은 서버에 저장되어 로그인한 모든 기기에 적용됩니다(Vault 폴더 선택만 브라우저마다 따로).</p>
             
             <div class="form-group">
+              <label>정리에 쓸 AI</label>
+              <div class="toggle-group">
+                <label class="toggle-option">
+                  <input type="radio" name="provider" value="gemini" checked onchange="updateProviderFields()">
+                  <span>Gemini (Google)</span>
+                </label>
+                <label class="toggle-option">
+                  <input type="radio" name="provider" value="claude" onchange="updateProviderFields()">
+                  <span>Claude (Anthropic)</span>
+                </label>
+              </div>
+              <span class="field-hint">고른 AI 의 키로 정리합니다. 두 키를 모두 저장해 두고 여기서 바꿔 쓸 수 있습니다.</span>
+            </div>
+
+            <div id="gemini-key-group" class="form-group" style="margin-top: 16px;">
               <label for="api-key-input">
                 <span>Gemini API Key</span>
                 <a href="https://aistudio.google.com/app/apikey" target="_blank" class="help-link">API Key 발급받기 <i data-lucide="external-link"></i></a>
@@ -234,7 +249,19 @@
                 <i data-lucide="key"></i>
                 <input type="password" id="api-key-input" placeholder="AI Studio에서 발급받은 API 키 입력">
               </div>
-              <span class="field-hint">API 키는 서버 저장소에만 보관되고 화면으로는 다시 내려오지 않습니다. 한 번 저장하면 새 키를 입력할 때까지 그대로 쓰입니다.</span>
+              <span class="field-hint">API 키는 암호화해 서버 저장소에만 보관되고 화면으로는 다시 내려오지 않습니다. 한 번 저장하면 새 키를 입력할 때까지 그대로 쓰입니다.</span>
+            </div>
+
+            <div id="claude-key-group" class="form-group hidden" style="margin-top: 16px;">
+              <label for="claude-key-input">
+                <span>Claude API Key</span>
+                <a href="https://console.anthropic.com/settings/keys" target="_blank" class="help-link">API Key 발급받기 <i data-lucide="external-link"></i></a>
+              </label>
+              <div class="input-with-icon">
+                <i data-lucide="key"></i>
+                <input type="password" id="claude-key-input" placeholder="Claude Console 에서 발급받은 API 키 입력 (sk-ant-...)">
+              </div>
+              <span class="field-hint">API 키는 암호화해 서버 저장소에만 보관되고 화면으로는 다시 내려오지 않습니다. 사용한 만큼 이 키의 Anthropic 계정에서 요금이 나갑니다.</span>
             </div>
 
             <!-- Chrome/Edge desktop: direct folder access -->
@@ -382,7 +409,7 @@
             <input type="password" id="login-password" autocomplete="current-password" placeholder="비밀번호 입력">
           </div>
         </div>
-        <span id="signup-hint" class="field-hint hidden" style="display: block; margin-top: 10px;">비밀번호는 8자 이상. 가입하면 설정과 Gemini API 키를 각자 따로 저장합니다.</span>
+        <span id="signup-hint" class="field-hint hidden" style="display: block; margin-top: 10px;">비밀번호는 8자 이상. 가입하면 설정과 API 키(Gemini 또는 Claude)를 각자 따로 저장합니다.</span>
         <span id="login-error" class="field-hint login-error"></span>
       </div>
       <div class="modal-footer">

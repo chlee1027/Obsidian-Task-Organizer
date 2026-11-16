@@ -1,5 +1,5 @@
 // AOTO front end. The /api functions (Vercel) hold user accounts, each user's settings
-// and Gemini API key; the key never reaches the browser.
+// and AI API keys (Gemini or Claude); the keys never reach the browser.
 // Notes are written to the Obsidian vault in one of two ways:
 //   1) File System Access API (Chrome/Edge on desktop): the user picks the vault
 //      folder once, and notes are read/written directly in that folder.
@@ -13,7 +13,10 @@ const state = {
   username: null,
   authMode: 'login',          // 'login' | 'signup'
   config: {
-    hasApiKey: false,
+    provider: 'gemini',         // 'gemini' | 'claude'
+    hasApiKey: false,           // whether the selected provider has a key
+    hasGeminiKey: false,
+    hasClaudeKey: false,
     vaultName: '',              // Used for obsidian:// URIs
     saveSubfolder: 'Daily Notes',
     weeklySchedule: {},
@@ -147,7 +150,7 @@ async function submitLogin(event) {
     document.getElementById('login-overlay').classList.remove('active');
     await onLoggedIn(data.username);
     if (signup) {
-      showToast('가입되었습니다. 설정에서 Gemini API 키를 먼저 등록해주세요.', 'success');
+      showToast('가입되었습니다. 설정에서 쓸 AI 를 고르고 API 키를 먼저 등록해주세요.', 'success');
       openConfigModal();
     }
   } catch (error) {
@@ -171,7 +174,7 @@ function resetUserState() {
   state.vaultPermission = 'none';
   state.existingMarkdown = '';
   state.generatedMarkdown = '';
-  state.config = { hasApiKey: false, vaultName: '', saveSubfolder: 'Daily Notes', weeklySchedule: {}, flexibleSchedule: '' };
+  state.config = { provider: 'gemini', hasApiKey: false, hasGeminiKey: false, hasClaudeKey: false, vaultName: '', saveSubfolder: 'Daily Notes', weeklySchedule: {}, flexibleSchedule: '' };
   document.getElementById('current-user').textContent = '';
   document.getElementById('raw-memo').value = '';
   document.getElementById('char-num').textContent = '0';
@@ -279,12 +282,20 @@ async function loadConfiguration() {
 function applyConfig(config) {
   state.config = config;
 
-  // The saved key is never sent back; the field stays empty unless the user types a new one
+  // Saved keys are never sent back; the fields stay empty unless the user types a new one
   const keyInput = document.getElementById('api-key-input');
   keyInput.value = '';
-  keyInput.placeholder = config.hasApiKey
+  keyInput.placeholder = config.hasGeminiKey
     ? '저장된 키 사용 중 (바꿀 때만 새 키 입력)'
     : 'AI Studio에서 발급받은 API 키 입력';
+  const claudeInput = document.getElementById('claude-key-input');
+  claudeInput.value = '';
+  claudeInput.placeholder = config.hasClaudeKey
+    ? '저장된 키 사용 중 (바꿀 때만 새 키 입력)'
+    : 'Claude Console 에서 발급받은 API 키 입력 (sk-ant-...)';
+  const provider = config.provider === 'claude' ? 'claude' : 'gemini';
+  document.querySelectorAll('input[name="provider"]').forEach(r => { r.checked = r.value === provider; });
+  updateProviderFields();
   document.getElementById('vault-name-input').value = config.vaultName || '';
   document.getElementById('subfolder-input').value = config.saveSubfolder || '';
 
@@ -304,15 +315,27 @@ function applyConfig(config) {
   updateStatusPills();
 }
 
+function providerLabel(provider) {
+  return provider === 'claude' ? 'Claude' : 'Gemini';
+}
+
+// Show only the key field of the AI selected in the settings modal
+function updateProviderFields() {
+  const checked = document.querySelector('input[name="provider"]:checked');
+  const provider = checked ? checked.value : 'gemini';
+  document.getElementById('gemini-key-group').classList.toggle('hidden', provider !== 'gemini');
+  document.getElementById('claude-key-group').classList.toggle('hidden', provider !== 'claude');
+}
+
 // Update the header status pills from current state
 function updateStatusPills() {
   const apiPill = document.getElementById('status-api');
   if (state.config.hasApiKey) {
     apiPill.className = 'status-pill status-success';
-    apiPill.querySelector('.status-text').textContent = 'API Key 연결됨';
+    apiPill.querySelector('.status-text').textContent = `API Key 연결됨 (${providerLabel(state.config.provider)})`;
   } else {
     apiPill.className = 'status-pill status-error';
-    apiPill.querySelector('.status-text').textContent = 'API Key 미설정';
+    apiPill.querySelector('.status-text').textContent = `${providerLabel(state.config.provider)} API Key 미설정`;
   }
 
   const vaultPill = document.getElementById('status-vault');
@@ -341,6 +364,9 @@ function updateStatusPills() {
 // Save Configuration
 async function saveConfiguration() {
   const apiKey = document.getElementById('api-key-input').value.trim();
+  const claudeApiKey = document.getElementById('claude-key-input').value.trim();
+  const checkedProvider = document.querySelector('input[name="provider"]:checked');
+  const provider = checkedProvider ? checkedProvider.value : 'gemini';
   const vaultName = document.getElementById('vault-name-input').value.trim();
   const subfolder = cleanPath(document.getElementById('subfolder-input').value);
 
@@ -365,7 +391,9 @@ async function saveConfiguration() {
   try {
     const data = await apiFetch('/api/config', {
       body: {
+        provider: provider,
         geminiApiKey: apiKey, // empty = keep the saved key
+        claudeApiKey: claudeApiKey, // empty = keep the saved key
         vaultName: vaultName,
         saveSubfolder: subfolder,
         weeklySchedule: weeklySchedule,
@@ -591,7 +619,7 @@ function loadSample() {
   showToast('작성 예시 텍스트를 불러왔습니다.', 'success');
 }
 
-// Generate Schedule by calling Gemini API
+// Generate Schedule by calling the selected AI (server side)
 async function generateTasks() {
   const rawText = document.getElementById('raw-memo').value.trim();
 
@@ -601,12 +629,13 @@ async function generateTasks() {
   }
 
   if (!state.config.hasApiKey) {
-    showToast('Gemini API Key 설정이 필요합니다.', 'error');
+    showToast(`${providerLabel(state.config.provider)} API Key 설정이 필요합니다.`, 'error');
     openConfigModal();
     return;
   }
 
   // Switch UI states to Loading
+  document.getElementById('loading-title').textContent = `${providerLabel(state.config.provider)} AI 분석 중`;
   setLoadingState(true);
 
   try {

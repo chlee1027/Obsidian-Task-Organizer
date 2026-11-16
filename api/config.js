@@ -14,10 +14,24 @@ function cleanPath(p) {
   return cleaned.trim().replace(/^[\/]+|[\/]+$/g, '');
 }
 
-// What the browser may see: everything except the API key itself
+const PROVIDERS = ['gemini', 'claude'];
+
+// Older configs have no provider field; they were Gemini-only
+function providerOf(config) {
+  return PROVIDERS.includes(config.provider) ? config.provider : 'gemini';
+}
+
+// What the browser may see: everything except the API keys themselves
 function publicView(config) {
+  const provider = providerOf(config);
+  const hasGeminiKey = Boolean(config.geminiApiKey);
+  const hasClaudeKey = Boolean(config.claudeApiKey);
   return {
-    hasApiKey: Boolean(config.geminiApiKey),
+    provider,
+    hasGeminiKey,
+    hasClaudeKey,
+    // Whether the selected provider has a key
+    hasApiKey: provider === 'claude' ? hasClaudeKey : hasGeminiKey,
     vaultName: config.vaultName || '',
     saveSubfolder: config.saveSubfolder ?? 'Daily Notes',
     weeklySchedule: config.weeklySchedule || {},
@@ -42,15 +56,22 @@ module.exports = async (req, res) => {
       const weeklySchedule = {};
       DAYS.forEach(d => { weeklySchedule[d] = str(weeklyIn[d], 1000); });
 
-      // An empty key field means "keep the saved key"; clearApiKey removes it explicitly.
-      // The key is stored encrypted; without KEY_ENCRYPTION_SECRET this throws and nothing is saved.
+      // An empty key field means "keep the saved key"; clearApiKey / clearClaudeApiKey remove one explicitly.
+      // Keys are stored encrypted; without KEY_ENCRYPTION_SECRET this throws and nothing is saved.
       const typedKey = str(body.geminiApiKey, 200);
       const geminiApiKey = body.clearApiKey
         ? ''
         : (typedKey ? encryptSecret(typedKey) : sealForStorage(current.geminiApiKey));
+      const typedClaudeKey = str(body.claudeApiKey, 300);
+      const claudeApiKey = body.clearClaudeApiKey
+        ? ''
+        : (typedClaudeKey ? encryptSecret(typedClaudeKey) : sealForStorage(current.claudeApiKey));
+      const provider = PROVIDERS.includes(body.provider) ? body.provider : providerOf(current);
 
       const next = {
+        provider,
         geminiApiKey,
+        claudeApiKey,
         vaultName: str(body.vaultName, 200),
         saveSubfolder: cleanPath(body.saveSubfolder),
         weeklySchedule,
