@@ -1,0 +1,30 @@
+# Runs the syntax check and unit tests on every push and pull request to main.
+# Deployment is handled separately by the Vercel GitHub integration.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        node-version: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Syntax check
+        run: |
+          find api lib public test -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Unit tests
+        run: npm test

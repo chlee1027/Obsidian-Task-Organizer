@@ -1,6 +1,7 @@
 const { sendJson, readJsonBody, isJsonRequest, requireUser, configKey } = require('../lib/http');
 const { getJson } = require('../lib/store');
 const { callGemini } = require('../lib/gemini');
+const { decryptSecret, migrateLegacyKey } = require('../lib/keybox');
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST' || !isJsonRequest(req)) {
@@ -18,13 +19,14 @@ module.exports = async (req, res) => {
       return sendJson(res, 400, { error: '날짜 형식이 올바르지 않습니다.' });
     }
 
-    const config = (await getJson(configKey(username))) || {};
+    const key = configKey(username);
+    const config = await migrateLegacyKey(key, (await getJson(key)) || {});
     if (!config.geminiApiKey) {
       return sendJson(res, 400, { error: 'Gemini API Key가 등록되지 않았습니다. 설정에서 먼저 등록해주세요.' });
     }
 
     const markdown = await callGemini(
-      config.geminiApiKey,
+      decryptSecret(config.geminiApiKey),
       config,
       rawText.slice(0, 20000),
       date,

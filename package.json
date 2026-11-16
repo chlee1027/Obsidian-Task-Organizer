@@ -4,7 +4,8 @@
   "private": true,
   "description": "AI daily-note organizer for Obsidian: turns messy memos into categorized checklists with Gemini (Vercel web app with per-user accounts)",
   "scripts": {
-    "dev": "npx --yes vercel dev"
+    "dev": "npx --yes vercel dev",
+    "test": "node --test"
   },
   "keywords": [
     "obsidian",

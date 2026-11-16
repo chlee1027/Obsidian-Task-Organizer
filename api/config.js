@@ -1,5 +1,6 @@
 const { sendJson, readJsonBody, isJsonRequest, requireUser, configKey } = require('../lib/http');
 const { getJson, setJson } = require('../lib/store');
+const { sealForStorage, encryptSecret, migrateLegacyKey } = require('../lib/keybox');
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
@@ -29,7 +30,7 @@ module.exports = async (req, res) => {
     const username = await requireUser(req, res);
     if (!username) return;
     const key = configKey(username);
-    const current = (await getJson(key)) || {};
+    const current = await migrateLegacyKey(key, (await getJson(key)) || {});
 
     if (req.method === 'GET') {
       return sendJson(res, 200, publicView(current));
@@ -41,9 +42,15 @@ module.exports = async (req, res) => {
       const weeklySchedule = {};
       DAYS.forEach(d => { weeklySchedule[d] = str(weeklyIn[d], 1000); });
 
+      // An empty key field means "keep the saved key"; clearApiKey removes it explicitly.
+      // The key is stored encrypted; without KEY_ENCRYPTION_SECRET this throws and nothing is saved.
+      const typedKey = str(body.geminiApiKey, 200);
+      const geminiApiKey = body.clearApiKey
+        ? ''
+        : (typedKey ? encryptSecret(typedKey) : sealForStorage(current.geminiApiKey));
+
       const next = {
-        // An empty key field means "keep the saved key"; clearApiKey removes it explicitly
-        geminiApiKey: body.clearApiKey ? '' : (str(body.geminiApiKey, 200) || current.geminiApiKey || ''),
+        geminiApiKey,
         vaultName: str(body.vaultName, 200),
         saveSubfolder: cleanPath(body.saveSubfolder),
         weeklySchedule,

@@ -94,7 +94,7 @@ iCloud Drive 에 둔 보관소라면, PC 에서는 방식 1로 `iCloud Drive/Obs
 | 무엇 | 어디에 저장 | 비고 |
 |---|---|---|
 | 아이디, 비밀번호 | 서버(Upstash Redis) | 비밀번호는 scrypt 해시만 저장, 원문은 저장하지 않음 |
-| Gemini API 키 | 서버, 아이디별 | 브라우저로 내려보내지 않음. 생성 요청은 서버(`/api/generate`)가 그 사람의 키로 Gemini 에 보냄 |
+| Gemini API 키 | 서버, 아이디별 | AES-256-GCM 으로 암호화해 저장(비밀값은 환경 변수 `KEY_ENCRYPTION_SECRET`, Redis 에 두지 않음). 브라우저로 내려보내지 않음. 생성 요청은 서버(`/api/generate`)가 그 사람의 키로 Gemini 에 보냄 |
 | 고정·유동 일정, Vault 이름, 하위 폴더 | 서버, 아이디별 | 그 사람이 로그인한 모든 기기에 같게 적용 |
 | Vault 폴더 접근 권한(방식 1) | 그 브라우저 안(IndexedDB), 아이디별 | 브라우저 보안 규칙상 서버에 둘 수 없음. 브라우저마다 한 번 고름 |
 | 로그인 상태 | 브라우저 쿠키(HttpOnly, 서명됨) | 365일 유지, 로그아웃 버튼으로 끝냄 |
@@ -115,8 +115,13 @@ iCloud Drive 에 둔 보관소라면, PC 에서는 방식 1로 `iCloud Drive/Obs
    - Primary Region 은 `us-east-1` 을 고릅니다. Redis 에 접속하는 쪽은 브라우저가 아니라 Vercel 서버 함수이고, Vercel 무료 요금제의 함수 기본 지역이 `iad1`(미국 워싱턴 D.C.)이기 때문입니다.
    - 연결하면 `KV_REST_API_URL`, `KV_REST_API_TOKEN` 환경 변수가 자동으로 들어갑니다.
    - 저장하는 것은 사용자 한 명당 키 두 개(계정 하나, 설정 하나), IP 별 로그인 실패 횟수(15분 뒤 지워짐)와 가입 횟수(1시간 뒤 지워짐), 로그인 쿠키 서명 키 하나입니다.
-3. 환경 변수는 새 배포부터 적용됩니다. Upstash 를 연결한 뒤에는 **Deployments** 에서 최신 배포를 **Redeploy** 합니다.
-4. 사이트에 들어가 **가입** 탭에서 계정을 만듭니다.
+3. **Settings > Environment Variables** 에 `KEY_ENCRYPTION_SECRET` 을 넣습니다. 적용 환경은 Production 과 Preview 를 모두 고릅니다. 값은 아래 명령으로 만듭니다.
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   ```
+   이 값이 없으면 API 키를 저장할 수 없고, 값을 잃거나 바꾸면 저장된 키를 풀 수 없어 사용자가 키를 다시 넣어야 합니다. 값은 따로 보관해 둡니다.
+4. 환경 변수는 새 배포부터 적용됩니다. Upstash 를 연결하고 위 값을 넣은 뒤에는 **Deployments** 에서 최신 배포를 **Redeploy** 합니다.
+5. 사이트에 들어가 **가입** 탭에서 계정을 만듭니다.
 
 이후 `main` 브랜치에 push 하면 Vercel 이 자동으로 다시 배포합니다.
 
@@ -125,6 +130,7 @@ iCloud Drive 에 둔 보관소라면, PC 에서는 방식 1로 `iCloud Drive/Obs
 | 이름 | 필수 | 내용 |
 |---|---|---|
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | 필수 | Upstash 연결 시 자동 입력. `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` 이름도 인식 |
+| `KEY_ENCRYPTION_SECRET` | 필수 | 사용자 Gemini API 키 암호화(AES-256-GCM)용 비밀값. 아무 문자열이나 되며 SHA-256 으로 32바이트 키를 만듦. 위 3단계 명령으로 만든 값을 권함. 없으면 키 저장이 오류로 막힘. 값을 바꾸거나 잃으면 저장된 키를 풀 수 없어 사용자가 키를 다시 넣어야 함. 이 기능 전에 저장된 평문 키는 그대로 읽히고, 이 값이 있을 때 읽히면 암호화해 다시 저장됨 |
 | `GEMINI_MODEL` | 선택 | 쓸 Gemini 모델 이름. 비우면 `gemini-3.8-flash` |
 | `SESSION_SECRET` | 선택 | 로그인 쿠키 서명 키. 비우면 처음 쓸 때 무작위 값을 만들어 Redis 에 보관. 값을 바꾸면 모든 기기가 로그아웃됨 |
 
@@ -140,6 +146,8 @@ iCloud Drive 에 둔 보관소라면, PC 에서는 방식 1로 `iCloud Drive/Obs
 | `Gemini API 오류 (403) The Gemini API free tier is not available for this project` | 그 키가 속한 Google 프로젝트가 무료 사용 대상이 아님(Google 이 프로젝트 단위로 판단). 같은 프로젝트에서 키를 새로 만들어도 같음 | [AI Studio 결제 페이지](https://aistudio.google.com/billing)에서 결제 계정을 연결. 사용한 만큼 요금이 나가므로 Google Cloud Billing 에 예산 알림을 걸어 두기를 권함 |
 | `Gemini API 오류 (400) API key not valid` | 키를 잘못 넣음 | 설정 창에 키를 다시 넣고 저장 |
 | `Gemini 응답이 길이 한도에 걸려 비어 있습니다` | 모델이 생각하는 데 응답 한도(16,384 토큰)를 다 씀 | 메모를 나눠서 다시 정리 |
+| `서버 설정 오류: KEY_ENCRYPTION_SECRET 환경 변수가 없어` | 배포에 암호화 비밀값이 없음 | 배포 3단계를 하고 Redeploy |
+| `저장된 API 키를 풀 수 없습니다` | `KEY_ENCRYPTION_SECRET` 값이 저장할 때와 다름(바뀜·잃음) | 설정 창에 API 키를 다시 넣고 저장 |
 | `저장소(Upstash Redis)가 연결되지 않았습니다` | Upstash 가 프로젝트에 연결되지 않음 | 배포 2단계를 하고 Redeploy |
 | `이 네트워크에서 가입이 많아 1시간 동안 가입이 막혔습니다` | 같은 IP 에서 1시간 안에 5개를 가입함 | 1시간 뒤 다시 시도 |
 | `실패가 많아 15분 동안 잠겼습니다` | 같은 IP 에서 10번 틀림 | 15분 뒤 다시 시도 |
@@ -165,6 +173,8 @@ lib/               서버 함수가 함께 쓰는 코드
   http.js          요청·응답 처리, 비밀번호 해시, 로그인 쿠키, 실패 횟수 제한
   store.js         Upstash Redis 접근 (REST API)
   gemini.js        Gemini 프롬프트와 호출
+  keybox.js        Gemini API 키 암호화·복호화(AES-256-GCM), 옛 평문 키 재저장
+test/              node:test 시험 (`npm test`)
 vercel.json        배포 설정 (public/ 출력, 보안 헤더, 생성 함수 최대 60초)
 ```
 
@@ -178,6 +188,8 @@ npm run dev
 
 Vercel CLI(`vercel dev`)로 화면과 `/api` 함수를 함께 띄웁니다. 처음에는 Vercel 로그인과 프로젝트 연결을 묻습니다.
 
+- 쓰는 환경 변수 이름은 `.env.example` 에 있습니다. API 키를 저장해 보려면 로컬에서도 `KEY_ENCRYPTION_SECRET` 이 있어야 합니다.
+- 시험은 `npm test` 로 돌립니다(의존성 없음).
 - 배포 환경의 환경 변수는 `vercel env pull` 로 받을 수 있습니다. 받은 `.env` 파일은 `.gitignore` 에 들어 있어 커밋되지 않습니다.
 - Redis 환경 변수가 없으면 로컬에서는 메모리에 저장하고, 서버를 끄면 지워집니다. Vercel 에 배포된 환경(Production, Preview)에서는 Redis 가 없으면 오류를 냅니다.
 - 폴더 직접 저장(방식 1)은 `https://` 주소나 `localhost` 에서만 동작합니다.
